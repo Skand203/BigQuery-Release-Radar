@@ -1,69 +1,213 @@
-# BigQuery Release Radar 🚀
+# BigQuery Release Radar
 
-A premium, responsive web application built with **Python Flask** and vanilla **HTML, CSS, and JavaScript** that fetches the official BigQuery Release Notes RSS feed and formats them into a clean, searchable, and interactive interface.
+**Automated RSS Feed Parser, Structured Cloud Release Monitor, and Digest Generator**
 
-It parses daily release entries into individual, category-coded updates (e.g., Features, Fixes, Changes, Notices) and allows you to select specific updates to tweet about them on X (Twitter) using a built-in character-counting tweet composer.
-
----
-
-## Features
-
-1. **Live XML Feed Fetching**: Fetches the official [BigQuery Release Notes XML Feed](https://docs.cloud.google.com/feeds/bigquery-release-notes.xml) dynamically via a backend API.
-2. **BeautifulSoup Feed Splitting**: Parses the feed entries' CDATA HTML on the server-side, splitting daily entries into individual, category-coded updates.
-3. **Advanced Filters & Real-time Search**:
-   - Filter by release category (Features, Fixes, Changes, Notices) with live count badges.
-   - Search by keyword through titles, categories, or release content.
-4. **Tweet Sharing Integration**:
-   - **Single Update Tweet**: Quick share button on each card that pre-formats the update title, snippet, and link, opening a Twitter intent.
-   - **Multi-select Digest**: Select multiple updates using checkboxes to compile a bulleted tweet digest, managed by a floating action banner.
-5. **Interactive Tweet Composer**: A modal displaying a draft tweet with a character counter that respects Twitter's `t.co` URL limit (23 characters) and live visual progress bars.
-6. **Premium Responsive UI**: Dark/Light modes persisting via `localStorage`, smooth animations, glassmorphism filters, and a mobile-friendly design.
+![Python](https://img.shields.io/badge/Python-3.x-blue?style=flat-square&logo=python)
+![Flask](https://img.shields.io/badge/Flask-Web%20Framework-000000?style=flat-square&logo=flask)
+![BeautifulSoup](https://img.shields.io/badge/BeautifulSoup-HTML%20Parser-darkgreen?style=flat-square)
+![Feedparser](https://img.shields.io/badge/Feedparser-XML%20Ingestion-orange?style=flat-square)
+![Vanilla JS](https://img.shields.io/badge/JavaScript-ES6+-F7DF1E?style=flat-square&logo=javascript&logoColor=black)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
 ---
 
-## File Structure
+## Overview
+
+**BigQuery Release Radar** is a Python Flask web application and ingestion service that transforms unstructured Google Cloud BigQuery release notes into an interactive, categorized, and searchable developer dashboard.
+
+### The Problem
+Google Cloud publishes official BigQuery release notes through an Atom XML feed. However, each RSS entry groups an entire day's heterogeneous updates—spanning new feature launches, breaking changes, critical bug fixes, deprecations, and regional announcements—into a single composite HTML blob. This makes it challenging for data engineers, DevOps specialists, and cloud architects to quickly identify updates relevant to their workflows.
+
+### The Solution
+BigQuery Release Radar ingests the upstream XML feed, extracts the CDATA HTML payload, and executes an intelligent HTML parsing algorithm that segments monolithic daily entries into discrete, typed release items. Users can filter updates by semantic category, search release content in real time, and compile custom release digests for distribution.
+
+---
+
+## System Architecture
 
 ```text
-E:\agy-cli-projects\
-├── app.py                 # Flask server with feedparser + BeautifulSoup parsing logic
-├── requirements.txt       # Python dependencies
-├── templates/
-│   └── index.html         # Main dashboard template, filters, and Tweet composer modal
-└── static/
-    ├── css/
-    │   └── style.css      # Core styling (Dark/Light themes, custom scrollbars, transitions)
-    └── js/
-        └── app.js         # Client-side state, event handlers, and tweet formatting logic
+ ┌──────────────────────────────────────────────────┐
+ │ Official BigQuery Release Notes (Atom/XML Feed)   │
+ └────────────────────────┬─────────────────────────┘
+                          │ HTTP GET
+                          ▼
+ ┌──────────────────────────────────────────────────┐
+ │ Python Flask Application (app.py)                │
+ │                                                  │
+ │  1. Ingestion: feedparser consumes XML feed      │
+ │  2. Parsing: BeautifulSoup DOM traversal         │
+ │     - Identifies <h3> / <h4> heading tags        │
+ │     - Segments composite entries into updates    │
+ │     - Normalizes category tags & clean text      │
+ │  3. Endpoints:                                   │
+ │     - GET /          -> Server-rendered UI       │
+ │     - GET /api/feed  -> Structured JSON API      │
+ └───────────┬──────────────────────────┬───────────┘
+             │ JSON / HTML              │ JSON Payload
+             ▼                          ▼
+ ┌───────────────────────┐  ┌───────────────────────┐
+ │ Interactive Dashboard │  │ REST API Consumers   │
+ │ - Real-time Search    │  └───────────────────────┘
+ │ - Category Badges     │
+ │ - Multi-select Digest │
+ │ - Twitter Composer    │
+ └───────────────────────┘
 ```
 
 ---
 
-## How to Run Locally
+## Key Features
 
-### 1. Create and Activate Virtual Environment (Done)
-If you need to re-create it:
+- **Automated Feed Parsing & Normalization:** Employs `feedparser` to manage XML namespaces and character encodings, combined with `BeautifulSoup4` to segment composite daily entries into structured individual cards.
+- **Categorization Engine:** Classifies release items into distinct categories (**Feature**, **Fix**, **Change**, **Announcement**, **Notice**) with dynamic count badges.
+- **Real-Time Client-Side Filtering:** Instant search filtering across release titles, descriptions, and category tags with zero latency.
+- **Interactive Social Digest Composer:** 
+  - Generates single-update announcement drafts or multi-item bulleted digest summaries.
+  - Features a live character counter adhering to Twitter/X constraints by accurately budgeting **23 characters** for `t.co` URL wrapping.
+- **Light & Dark Theme Engine:** Modern responsive interface with persistent theme selection saved in browser `localStorage`.
+- **Unit Test Coverage:** Automated test suite (`test_parser.py`) verifying feed segmenting, heading extraction, and fallback parsing.
+
+---
+
+## Project Structure
+
+```text
+BigQuery-Release-Radar/
+├── app.py                 # Core Flask backend, feed ingestion & BeautifulSoup parser
+├── test_parser.py         # Unit test suite verifying parsing logic and edge cases
+├── requirements.txt       # Production dependencies
+├── templates/
+│   └── index.html         # Jinja2 dashboard template, modals, and filter controls
+├── static/
+│   ├── css/
+│   │   └── style.css      # Custom dark/light mode styles, layout, and components
+│   └── js/
+│       └── app.js         # Client-side filtering, DOM updates, and tweet generator
+├── .gitignore
+└── README.md
+```
+
+---
+
+## Technical Implementation Details
+
+### HTML Feed Partitioning Algorithm
+BigQuery release notes bundle multiple updates under one date entry using consecutive heading tags. The parser in `app.py` traverses child nodes sequentially:
+```python
+def parse_entry_content(content_html):
+    soup = BeautifulSoup(content_html, 'html.parser')
+    updates = []
+    current_category = "General"
+    current_blocks = []
+
+    for element in soup.contents:
+        if isinstance(element, str) and not element.strip():
+            continue
+        if element.name in ['h3', 'h4']:
+            if current_blocks:
+                updates.append({
+                    "category": current_category,
+                    "html_content": "".join(str(e) for e in current_blocks).strip(),
+                    "text_content": BeautifulSoup("".join(str(e) for e in current_blocks), 'html.parser').get_text(separator=' ').strip()
+                })
+                current_blocks = []
+            current_category = normalize_category(element.get_text(strip=True))
+        else:
+            current_blocks.append(element)
+    ...
+```
+
+### URL Budgeting in Social Composer
+Standard length calculations fail on Twitter/X because all HTTP/HTTPS links are automatically wrapped in 23-character `t.co` short links. The composer logic calculates available character limits dynamically:
+$$\text{Effective Length} = \text{Text Characters} + (\text{URL Count} \times 23)$$
+
+---
+
+## API Endpoints
+
+### 1. Web Dashboard
+- **Route:** `GET /`
+- **Description:** Renders the main dashboard with parsed releases, live filter counts, and tweet modal.
+
+### 2. Structured Feed API
+- **Route:** `GET /api/feed`
+- **Description:** Returns JSON representation of the latest parsed release entries.
+- **Response Sample:**
+  ```json
+  {
+    "status": "success",
+    "total_updates": 48,
+    "categories": {
+      "Feature": 22,
+      "Fix": 14,
+      "Change": 8,
+      "Notice": 4
+    },
+    "entries": [
+      {
+        "date": "November 14, 2026",
+        "category": "Feature",
+        "title": "Continuous query export support",
+        "content_html": "<p>BigQuery now supports continuous query exports...</p>",
+        "link": "https://cloud.google.com/bigquery/docs/release-notes#November_14_2026"
+      }
+    ]
+  }
+  ```
+
+---
+
+## Getting Started
+
+### Prerequisites
+- Python 3.9 or higher
+- Git
+
+### 1. Clone the Repository
 ```bash
-# Windows
+git clone https://github.com/Skand203/BigQuery-Release-Radar.git
+cd BigQuery-Release-Radar
+```
+
+### 2. Set Up a Virtual Environment
+```bash
+# On Linux/macOS
+python3 -m venv venv
+source venv/bin/activate
+
+# On Windows
 python -m venv venv
 venv\Scripts\activate
 ```
 
-### 2. Install Dependencies (Done)
+### 3. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Run the Flask Server
-The server is currently running in the background. If you need to start it manually:
+### 4. Run Automated Tests
+Execute the unit test suite to verify parsing logic:
+```bash
+python -m unittest test_parser.py
+```
+
+### 5. Launch the Application
 ```bash
 python app.py
 ```
-This runs the application in debug mode on **`http://127.0.0.1:5000`**.
+Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your web browser.
 
 ---
 
-## Architecture and Design Decisions
+## Future Enhancements
 
-- **Feed Parsing**: Using `feedparser` instead of standard XML libraries since it manages XML namespaces, character encodings, and invalid characters automatically.
-- **Content Partitioning**: BigQuery release notes lump multiple updates under a single day's RSS entry. We parse the entry's HTML using BeautifulSoup, identifying `<h3>` and `<h4>` headers (e.g., `Feature`, `Fix`) to partition updates into separate, selectable cards.
-- **Twitter Character Counter**: The modal calculates character count according to Twitter guidelines. Rather than using raw URL lengths, it counts the source URL as exactly `23` characters since Twitter wraps all links in `t.co`. This guarantees absolute accuracy in the live character warning bar before you hit "Tweet on X".
+- [ ] Scheduled background feed polling with **Redis** caching to reduce upstream network calls.
+- [ ] Automated Slack / Discord webhook notifications when high-priority breaking changes are detected.
+- [ ] Export releases as periodic markdown or JSON digests for engineering changelogs.
+- [ ] Docker containerization with multi-stage build for production deployment.
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
